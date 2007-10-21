@@ -24,30 +24,36 @@
 // <![CDATA[
   
   // define a sample widget
+  var TabWidgetClass = WJS.Widget.create( "ul.tab", {
+    initialize: function(){
+      WJS.Widget.prototype.initialize.apply(this, arguments);
+      this.element.getElementsBySelector("li a").each( function(anchor) {
+        anchor.href = anchor.href.replace(window.location.protocol + "//" + window.location.host,'').replace(/\//,'#')
+        Event.observe(anchor,"click",this.toggle.bindAsEventListener(this));
+      }.bind(this) );
+    },
+    toggle: function(e)
+    {
+      Event.stop(e);
+    }
+  });
 
   new Test.Unit.Runner({
     testWidgetCreate: function() { with(this) {
       var selector = "ul.tab";
-      var TabWidgetClass = WJS.Widget.create( selector, {
-        initialize: function(){
-          WJS.Widget.prototype.initialize.apply(this, arguments);
-          this.element.getElementsBySelector("li a").each( function(anchor) {
-            anchor.href = anchor.href.replace(window.location.protocol + "//" + window.location.host,'').replace(/\//,'#')
-            Event.observe(anchor,"click",this.toggle.bindAsEventListener(this));
-          }.bind(this) );
-        },
-        toggle: function(e)
-        {
-          Event.stop(e);
-        }
-      });
       var element = $$(selector).first();
       assert( WJS.DOM.registry );
       WJS.DOM.bind();
       var instance = WJS.DOM.findByType( TabWidgetClass ).first();
       assert( instance, "Failed to locate TabWidgetClass instance" );
-      assertEqual( selector, instance.selectors.first() );
+      assertEqual( selector, instance.__selectors.first() );
       assertEqual( element, instance.element );
+    } },
+    testMultipleBind: function() { with(this) {
+      // binding a second time should not create the widget
+      WJS.DOM.bind();
+      var instances = WJS.DOM.findByType( TabWidgetClass );
+      assertEqual( 1, instances.length );
     } }
   }, "testlog");
 
