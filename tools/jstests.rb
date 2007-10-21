@@ -1,0 +1,301 @@
+require 'thread'
+require 'webrick'
+require 'fileutils'
+require 'rubygems'
+require 'active_support'
+require 'benchmark'
+require 'timeout'
+
+if PLATFORM.match(/win32/)
+require 'win32ole'
+end
+
+if PLATFORM.match(/darwin/)
+def applescript(script)
+  system "osascript -e '#{script}' 2>&1 >/dev/null"
+end
+end
+
+class IeBrowser
+  def initialize
+    return unless PLATFORM.match(/win32/)
+    @ie = WIN32OLE.new('InternetExplorer.Application')
+    @ie.visible = true
+  end
+
+  def supported?
+    PLATFORM.match(/mswin/)
+  end
+
+  def teardown
+    @ie.Quit
+  end
+
+  def visit(url)
+    @ie.Navigate(url)
+    while @ie.ReadyState != 4 do
+      sleep(1)
+    end
+  end
+  def to_s; "IE"; end
+end
+
+class FirefoxBrowser
+  def initialize
+    if PLATFORM.match(/win32/)
+      @path = File.join(ENV['ProgramFiles'] || 'C:\Program Files', 'Mozilla Firefox', 'firefox.exe')
+    end
+    if PLATFORM.match(/linux/)
+      @path = `which firefox`
+    end
+    @visited = []
+  end
+  
+  def supported?
+    PLATFORM.match(/mswin/) or PLATFORM.match(/linux/) or PLATFORM.match(/darwin/)
+  end
+
+  def teardown
+    if PLATFORM.match(/darwin/)
+      @visited.each do|visited|
+        #applescript('tell application "Firefox" to Close URL "' + visited + '"')
+        # see: http://lists.apple.com/archives/applescript-users/2007/Aug/msg00262.html
+        # TODO: we need a better way to teardown in firefox
+        applescript %Q(tell application "Firefox"
+                          activate
+                          tell application "System Events"
+                            keystroke "w" using command down
+                          end tell
+                        end tell)
+      end
+    else
+      # TODO:
+    end
+  end
+
+  def visit(url)
+    if PLATFORM.match(/darwin/)
+      applescript('tell application "Firefox" to Get URL "' + url + '"')
+      @visited << url
+    else
+      system("#{@path} #{url}")
+    end
+  end
+  def to_s; "Firefox"; end
+end
+
+class OperaBrowser
+  def initialize
+    if PLATFORM.match(/win32/)
+      @path = File.join(ENV['ProgramFiles'] || 'C:\Program Files', 'Opera', 'Opera.exe')
+    end
+    if PLATFORM.match(/linux/)
+      @path = `which opera`
+    end
+    if PLATFORM.match(/darwin/)
+      applescript('tell application "Opera" to make new document')
+    end
+  end
+  
+  def supported?
+    PLATFORM.match(/mswin/) or PLATFORM.match(/linux/) or PLATFORM.match(/darwin/)
+  end
+
+  def teardown
+    if PLATFORM.match(/darwin/)
+      applescript('tell application "Opera" to quit')
+    else
+      # TODO:
+    end
+  end
+
+  def visit(url)
+    if PLATFORM.match(/darwin/)
+      applescript('tell application "Opera" to GetURL "' + url + '"')
+    else
+      system("#{@path} #{url}")
+    end
+  end
+
+  def to_s; "Opera"; end
+
+end
+
+class KonquerorBrowser
+#TODO: implement me
+  def supported?
+    false
+  end
+end
+
+class SafariBrowser
+  def initialize
+    #applescript('tell application "Safari" to make new document')
+  end
+
+  def supported?
+    PLATFORM.match(/darwin/)
+  end
+
+  def teardown
+    applescript('tell application "Safari" to quit')
+  end
+
+  def visit(url)
+    applescript('tell application "Safari" to set URL of front document to "' + url + '"')
+  end
+
+  def to_s ;"Safari" ;end
+end
+
+::WEBrick::HTTPServer.class_eval do
+  def access_log(config, req, res)
+    #puts "Access: #{req.inspect}, #{res.inspect}"
+    # silence logging
+  end
+end
+::WEBrick::BasicLog.class_eval do
+  def log(level, data)
+    # silence logging
+    #puts "Basic: #{level.inspect}, #{data.inspect}"
+  end
+end
+
+# from jstest.rb, make sure the files aren't being cached
+class NonCachingFileHandler < WEBrick::HTTPServlet::FileHandler
+  def do_GET(req, res)
+    super
+ 
+    res['Content-Type'] = case req.path
+      when /\.js$/   then 'text/javascript'
+      when /\.html$/ then 'text/html'
+      when /\.css$/  then 'text/css'
+      else 'text/plain'
+    end
+ 
+    res['ETag'] = nil
+    res['Last-Modified'] = Time.now + 100**4
+    res['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0'
+    res['Pragma'] = 'no-cache'
+    res['Expires'] = Time.now - 100**4
+  end
+end
+
+ 
+=begin
+  usage:
+
+  tester = JSTestRunner.new
+
+  tester.mount("/url","path")
+
+  tester.add_tests( Dir["test/unit/*.html"] )
+
+  tester.add_browsers( :safari, :firefox, :ie, :konqueror, :opera )
+
+  tester.run
+
+=end
+class JSTestRunner
+  def initialize( port = 4711 )
+    @tests = []
+    @browsers = []
+
+    @server = WEBrick::HTTPServer.new(:Port => port)
+    @queue = Queue.new
+    
+    # from jstest.rb
+    @server.mount_proc("/results") do |req, res|
+      @queue.push({
+        :tests => req.query['tests'].to_i,
+        :assertions => req.query['assertions'].to_i,
+        :failures => req.query['failures'].to_i,
+        :errors => req.query['errors'].to_i
+      })
+      res.body = "OK"
+    end
+
+    @server.mount_proc("/content-type") do |req, res|
+      res.body = req["content-type"]
+    end
+
+    @server.mount_proc("/response") do |req, res|
+      req.query.each {|k, v| res[k] = v unless k == 'responseBody'}
+      res.body = req.query["responseBody"]
+    end    
+
+  end
+
+  def mount(url,filepath)
+    @server.mount(url, NonCachingFileHandler, filepath, true )
+  end
+
+  def add_tests( *tests )
+    @tests += tests
+  end
+
+  def add_browsers( *browsers )
+    @browsers += browsers
+  end
+
+  def run
+    trap("INT") { @server.shutdown }
+    t = Thread.new { @server.start }
+
+    @browsers.flatten!
+    @tests.flatten!
+
+    @browsers = @browsers.collect{|browser| "#{browser.to_s.camelize}Browser".constantize.new}
+    @browsers = @browsers.select{|browser| browser.supported? }
+
+    @browsers.each do|browser|
+      results = {:tests => 0, :assertions => 0, :failures => 0, :errors => 0}
+      errors = []
+      failures = []
+      test_time = Benchmark::measure do
+        puts "Testing browser => #{browser}"
+        @tests.each do |test|
+          result = []
+          value = "."
+          begin
+            Timeout::timeout(10) do 
+              browser.visit("http://localhost:4711/#{test}?resultsURL=http://localhost:4711/results&t=" + ("%.6f" % Time.now.to_f))
+              result = @queue.pop
+              result.each { |k, v| results[k] += v }
+            end
+          rescue Timeout::Error => e
+            puts e.message
+            result = {}
+            result[:failures] = 0
+            result[:errors] = 1
+          end
+          
+          if result[:failures] > 0
+            value = "F"
+            failures.push(test)
+          end
+          
+          if result[:errors] > 0
+            value = "E"
+            errors.push(test)
+          end
+   
+          print value
+        end
+      end
+
+      if failures.empty? and errors.empty?
+        browser.teardown
+      end
+ 
+      puts "\nFinished in #{(test_time.real).round.to_s} seconds."
+      puts "  Failures: #{failures.join(', ')}" unless failures.empty?
+      puts "  Errors:   #{errors.join(', ')}" unless errors.empty?
+      puts "#{results[:tests]} tests, #{results[:assertions]} assertions, #{results[:failures]} failures, #{results[:errors]} errors"
+    end
+    
+    @server.shutdown
+    t.join
+  end
+
+end

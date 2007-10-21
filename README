@@ -1,0 +1,6 @@
+WidgetJS:
+
+	A simple library for binding widgets to a portion of markup within an HTML page. 
+	It builds on top of PrototypeJS providing a means to bind and encapsulate behavior to markup.
+
+WJS
