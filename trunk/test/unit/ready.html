@@ -11,13 +11,16 @@
 </head>
 <body>
 <div id="testlog"> </div>
+<div id="ready"></div>
 
 <script type="text/javascript" charset="utf-8">
 // <![CDATA[
-
+  WJS.DOM.ready( function(){
+    $("ready").innerHTML = "ready";
+  });
   new Test.Unit.Runner({
-    testWidget: function() { with(this) {
-      assert( $('testlog') );
+    testReady: function() { with(this) {
+      assertEqual( "ready", $('ready').innerHTML );
     } }
   }, "testlog");
 

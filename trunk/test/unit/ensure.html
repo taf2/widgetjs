@@ -10,14 +10,22 @@
   <script type="text/javascript" src="/libjs/widget.js"></script>
 </head>
 <body>
-<div id="testlog"> </div>
+<div id="testlog"></div>
+<div id="ensure"></div>
 
 <script type="text/javascript" charset="utf-8">
 // <![CDATA[
+  WJS.DOM.ensure( function(){
+    $("ensure").innerHTML = "ensure";
+  });
 
   new Test.Unit.Runner({
-    testWidget: function() { with(this) {
-      assert( $('testlog') );
+    testEnsure: function() { with(this) {
+      assertEqual( "ensure", $('ensure').innerHTML );
+      WJS.DOM.ensure( function(){
+        $("ensure").innerHTML = "still sure";
+      });
+      assertEqual( "still sure", $('ensure').innerHTML );
     } }
   }, "testlog");
 
