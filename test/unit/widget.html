@@ -45,7 +45,7 @@
       assert( WJS.DOM.registry );
       WJS.DOM.bind();
       var instance = WJS.DOM.findByType( TabWidgetClass ).first();
-      assert( instance, "Failed to locate TabWidgetClass" );
+      assert( instance, "Failed to locate TabWidgetClass instance" );
       assertEqual( selector, instance.selectors.first() );
       assertEqual( element, instance.element );
     } }
