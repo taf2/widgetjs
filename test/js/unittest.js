@@ -275,7 +275,12 @@ Test.Unit.Assertions.prototype = {
   },
   error: function(error) {
     this.errors++;
-    this.messages.push(error.name + ": "+ error.message + "(" + Test.Unit.inspect(error) +")");
+    if( error.stack ){
+      this.messages.push(error.name + ": "+ error.message + "(" + error.stack +")");
+    }
+    else{
+      this.messages.push(error.name + ": "+ error.message + "(" + Test.Unit.inspect(error) +")");
+    }
   },
   status: function() {
     if (this.failures > 0) return 'failed';

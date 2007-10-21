@@ -226,6 +226,12 @@ class JSTestRunner
 
   end
 
+  # run the server only
+  def start
+    trap("INT") { @server.shutdown }
+    @server.start
+  end
+
   def mount(url,filepath)
     @server.mount(url, NonCachingFileHandler, filepath, true )
   end
