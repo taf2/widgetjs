@@ -2,7 +2,7 @@
         "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
-  <title>Test</title>
+  <title>Test Widget</title>
   <meta http-equiv="content-type" content="text/html; charset=utf-8" />
   <link rel="stylesheet" href="/testcss/test.css" type="text/css" />
   <script type="text/javascript" src="/testjs/prototype.js"></script>
@@ -10,14 +10,44 @@
   <script type="text/javascript" src="/libjs/widget.js"></script>
 </head>
 <body>
-<div id="testlog"> </div>
+<h1>Test Widget</h1>
+
+<div id="testlog"></div>
+
+<ul class='tab'>
+  <li><a href="/link1">Link1</a></li>
+  <li><a href="/link2">Link2</a></li>
+  <li><a href="/link3">Link3</a></li>
+</ul>
 
 <script type="text/javascript" charset="utf-8">
 // <![CDATA[
+  
+  // define a sample widget
 
   new Test.Unit.Runner({
-    testWidget: function() { with(this) {
-      assert( $('testlog') );
+    testWidgetCreate: function() { with(this) {
+      var selector = "ul.tab";
+      var TabWidgetClass = WJS.Widget.create( selector, {
+        initialize: function(){
+          WJS.Widget.prototype.initialize.apply(this, arguments);
+          this.element.getElementsBySelector("li a").each( function(anchor) {
+            anchor.href = anchor.href.replace(window.location.protocol + "//" + window.location.host,'').replace(/\//,'#')
+            Event.observe(anchor,"click",this.toggle.bindAsEventListener(this));
+          }.bind(this) );
+        },
+        toggle: function(e)
+        {
+          Event.stop(e);
+        }
+      });
+      var element = $$(selector).first();
+      assert( WJS.DOM.registry );
+      WJS.DOM.bind();
+      var instance = WJS.DOM.findByType( TabWidgetClass ).first();
+      assert( instance, "Failed to locate TabWidgetClass" );
+      assertEqual( selector, instance.selectors.first() );
+      assertEqual( element, instance.element );
     } }
   }, "testlog");
 

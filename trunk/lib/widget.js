@@ -15,30 +15,42 @@ WJS.DOM = {
 	{
 		this.widgets = new Array();
     this.registry = new Hash(); // store registered widgets by class name
+    this.widgetCount = 0;
 	},
   // on page load or WJS.DOM.bind(document.body)
   // locate the cssSelector in the DOM and initialize a new widgetClass
 	register: function(cssSelector, widgetClass)
   {
-    this.registry[widgetClass] ||= new Array();
-    this.registry[widgetClass].push(cssSelector);
+    if( !widgetClass.__widget_id ){
+      widgetClass.__widget_id = this.widgetCount++;
+    }
+    var widgetId = widgetClass.__widget_id; 
+    var widgetRegistry = this.registry[widgetId];
+    if( !widgetRegistry ){
+      widgetRegistry = this.registry[widgetId] = {selectors:new Array(), klass: widgetClass};
+    }
+    widgetRegistry.selectors.push(cssSelector);
   },
   // remove the registered class and 
   // call widgetClass.prototype.teardown for each instance created
   unregister: function(widgetClass)
   {
-    this.registry[widgetClass] = null;
+    if( !widgetClass.__widget_id ){
+      return; // unregistered
+    }
+    this.registry[widgetClass.__widget_id] = null;
   },
   // search for all registered behaviors within element
   // and instantiate each widgetClass 
   bind: function(element)
   {
+    element = $(element || document.body);
     this.registry.each( function( pair ){
-      var type = pair.key;
-      var selector = pair.value;
-      var elements = element.getElementsBySelector(selector);
+      var type = pair.value.klass;
+      var selectors = pair.value.selectors;
+      var elements = element.getElementsBySelector(selectors);
       for( var i = 0, len = elements.length; i < len; ++i ){
-        this.widgets.push( new type(elements[i], selector) );
+        this.widgets.push( new type(elements[i], selectors) );
       }
     }.bind(this));
   },
@@ -54,7 +66,7 @@ WJS.DOM = {
           var matched = widget.element == element;
           if( matched && widget.teardown ){ widget.teardown(); }
           return matched;
-        });
+        } );
       }
     }.bind(this));
   },
@@ -87,6 +99,18 @@ WJS.DOM = {
   bindNow: function()
   {
   },
+  // call method when the DOM is ready.
+  // works as if there was a standard domready even e.g. Event.observe(window,"domready",method);
+  ready: function(method)
+  {
+  },
+  // similar to ready except it will always call the method if the DOM is ready
+  // where as ready is only called once when the event is fired. ensure is more like
+  // a wrapper to ensure that the DOM is ready before the method is called, but it always
+  // calls the method.
+  ensure: function(method)
+  {
+  },
   findBySelectors: function(cssSelectors)
   {
     var widgets = new Array();
@@ -103,7 +127,13 @@ WJS.DOM = {
   // find all widgets created of type widgetClass
   findByType: function(widgetClass)
   {
-    return this.findBySelectors( this.registry[widgetClass] );
+    var widgetRegistry = this.registry[widgetClass.__widget_id];
+    if( widgetRegistry ){
+      return this.findBySelectors( widgetRegistry.selectors );
+    }
+    else{
+      return [];
+    }
   },
   // return all widgetClass objects associated to the given element
   findByElement: function(element)
@@ -120,10 +150,10 @@ WJS.Remote = {
 // constructor expects an element and a selector
 WJS.Widget = Class.create();
 Object.extend( WJS.Widget.prototype, {
-  initialize: function( el, selector )
+  initialize: function( el, selectors )
   {
-    this.element = $(el).cleanWhitespace();
-    this.selector = selector;
+    this.element = $($(el).cleanWhitespace());
+    this.selectors = $A(selectors);
   }
 } );
 
@@ -138,25 +168,24 @@ Object.extend(WJS.Widget,{
     var args = $A(arguments);
 
     // use all strings as selectors
-    var selectors = args.select( function(arg){ return arg instanceOf(String); } );
+    var selectors = args.select( function(arg){ return (typeof( arg ) == "string"); } );
     // use everything else as a Class
-    var extendors = args.reject( function(arg){ return arg instanceOf(String); } );
+    var extendors = args.reject( function(arg){ return (typeof( arg ) == "string"); } );
 
     // add widget
     extendors.unshift( WJS.Widget );
 
     // remove duplicates
-    extendors = extendors.uniq();
-
-    // save the last one to extend outside the loop without the prototype
-    var len = extendors.length -1;
+    extendors = extendors.uniq().reverse();
 
     // extended each prototype
-    for( var i = 0; i < len; ++i ){ Object.extend(klass.prototype,extendors[i].prototype); }
-
-    // add the class implementation
-    Object.extend(klass.prototype,args[len]);
+    for( var i = 0; i < extendors.length - 1; ++i ){ Object.extend(klass.prototype,extendors[i].prototype); }
+    Object.extend(klass.prototype, args.last() );
+    
+    // auto register this class to any selectors
+    selectors.each( function(selector){ this.register( selector, klass ); }.bind(WJS.DOM) );
 
     return klass;
   }
 });
+WJS.DOM.initialize();
