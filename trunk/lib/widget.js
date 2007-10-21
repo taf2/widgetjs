@@ -16,7 +16,7 @@ WJS.DOM = {
 		this.widgets = new Array();
     this.registry = new Hash(); // store registered widgets by class name
     this.widgetCount = 0;
-    this.domLoaded = false;
+    this.loaded = false;
     this.ensureQueue = new Array();
     this.readyQueue = new Array();
     this._initializeDOM();
@@ -46,7 +46,7 @@ WJS.DOM = {
   },
   _notifyDOMLoaded: function()
   {
-    this.domLoaded = true;
+    this.loaded = true;
     for( var i = 0, len = this.readyQueue.length; i < len; ++i ){
       this.readyQueue[i]();
     }
@@ -141,15 +141,23 @@ WJS.DOM = {
   // The advantage to inline event handlers i.e. 'onclick and onmouseover' is your
   // markup can more easily degrade, is less likely to be dependent on javascript,
   // and is smaller.
+  // 
+  // It's very important that if you use this method you always place your script tag at the
+  // end of a div.
   //
   bindNow: function()
   {
+    if( this.loaded ){ return; } // return if the dom is already loaded
+    var id = "wjs-" + Math.random();
+    // create a marker to attach a DOM operation, remember this is called before we have a full DOM tree
+    document.write("<div id='" + id + "'></div>");
+    this.bind($(id).parentNode);
   },
   // call method when the DOM is ready.
   // works as if there was a standard domready even e.g. Event.observe(window,"domready",method);
   ready: function(method)
   {
-    if( !this.domLoaded ){
+    if( !this.loaded ){
       this.readyQueue.push( method );
     }
   },
@@ -159,7 +167,7 @@ WJS.DOM = {
   // calls the method.
   ensure: function(method)
   {
-    if( !this.domLoaded ){
+    if( !this.loaded ){
       this.ensureQueue.push( method );
     }
     else{

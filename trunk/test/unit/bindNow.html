@@ -8,16 +8,43 @@
   <script type="text/javascript" src="/testjs/prototype.js"></script>
   <script type="text/javascript" src="/testjs/unittest.js"></script>
   <script type="text/javascript" src="/libjs/widget.js"></script>
+  <script>
+  // define a sample widget
+  var TabWidgetClass = WJS.Widget.create( "ul.tab", {
+    initialize: function(){
+      WJS.Widget.prototype.initialize.apply(this, arguments);
+      this.element.getElementsBySelector("li a").each( function(anchor) {
+        anchor.href = anchor.href.replace(window.location.protocol + "//" + window.location.host,'').replace(/\//,'#')
+        Event.observe(anchor,"click",this.toggle.bindAsEventListener(this));
+      }.bind(this) );
+    },
+    toggle: function(e)
+    {
+      Event.stop(e);
+    }
+  });
+  </script>
 </head>
 <body>
+
+<div>
+  <ul class='tab'>
+    <li><a href="/link1">Link1</a></li>
+    <li><a href="/link2">Link2</a></li>
+    <li><a href="/link3">Link3</a></li>
+  </ul>
+  <script>WJS.DOM.bindNow()</script>
+</div>
+
 <div id="testlog"> </div>
 
 <script type="text/javascript" charset="utf-8">
 // <![CDATA[
 
   new Test.Unit.Runner({
-    testWidget: function() { with(this) {
-      assert( $('testlog') );
+    testBindNow: function() { with(this) {
+      var instance = WJS.DOM.findByType( TabWidgetClass ).first();
+      assert( instance, "Failed to locate TabWidgetClass instance" );
     } }
   }, "testlog");
 
