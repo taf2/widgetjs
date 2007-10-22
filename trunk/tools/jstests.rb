@@ -6,25 +6,44 @@ require 'active_support'
 require 'benchmark'
 require 'timeout'
 
-if PLATFORM.match(/win32/)
-require 'win32ole'
+class OS
+	def self.win32?
+		PLATFORM.match(/win32/) or PLATFORM.match(/cygwin/)
+	end
+	
+	def self.cygwin?
+		PLATFORM.match(/cygwin/)
+	end
+
+	def self.osx?
+		PLATFORM.match(/darwin/)
+	end
+	
+	def self.linux?
+		PLATFORM.match(/linux/)
+	end
+		
 end
 
-if PLATFORM.match(/darwin/)
-def applescript(script)
-  system "osascript -e '#{script}' 2>&1 >/dev/null"
+if OS.win32?
+	require 'win32ole'
 end
+
+if OS.osx?
+	def applescript(script)
+		system "osascript -e '#{script}' 2>&1 >/dev/null"
+	end
 end
 
 class IeBrowser
   def initialize
-    return unless PLATFORM.match(/win32/)
+    return unless OS.win32?
     @ie = WIN32OLE.new('InternetExplorer.Application')
-    @ie.visible = true
+    @ie.Visible = true
   end
 
   def supported?
-    PLATFORM.match(/mswin/)
+    OS.win32?
   end
 
   def teardown
@@ -35,8 +54,13 @@ class IeBrowser
   end
 
   def visit(url)
+    @ie.Visible = true
     @ie.Navigate(url)
-    while @ie.ReadyState != 4 do
+    while @ie.busy and @ie.readyState != 4 do
+      sleep(1)
+    end
+		sleep(1)
+    while @ie.busy and @ie.readyState != 4 do
       sleep(1)
     end
   end
@@ -45,23 +69,31 @@ end
 
 class FirefoxBrowser
   def initialize
-    if PLATFORM.match(/win32/)
-      @path = File.join(ENV['ProgramFiles'] || 'C:\Program Files', 'Mozilla Firefox', 'firefox.exe')
+    if OS.win32?
+      @path = File.join('C:', 'Program Files', 'Mozilla Firefox', 'firefox.exe')
+			@supported = File.exist?(@path)
+			if OS.cygwin?
+				@path = `cygpath -u #{@path}`.gsub(/\n/,' ').gsub(/ /,'\ ').gsub(/\\\ $/,'')
+			end
     end
-    if PLATFORM.match(/linux/)
+    if OS.linux?
       @path = `which firefox`
+			@supported = File.exist?(@path)
     end
+    if OS.osx?
+			@supported = true
+		end
   end
   
   def supported?
-    PLATFORM.match(/mswin/) or PLATFORM.match(/linux/) or PLATFORM.match(/darwin/)
+    @supported
   end
 
   def teardown
   end
 
   def visit(url)
-    if PLATFORM.match(/darwin/)
+    if OS.osx?
       applescript(%Q(tell application "Firefox"
                         activate
                         Get URL "#{url}"
@@ -73,7 +105,7 @@ class FirefoxBrowser
   end
 
   def close_page(url)
-    if PLATFORM.match(/darwin/)
+    if OS.osx?
       # see: http://lists.apple.com/archives/applescript-users/2007/Aug/msg00262.html
       # TODO: we need a better way to teardown in firefox
       applescript %Q(tell application "Firefox"
@@ -90,23 +122,30 @@ end
 
 class OperaBrowser
   def initialize
-    if PLATFORM.match(/win32/)
-      @path = File.join(ENV['ProgramFiles'] || 'C:\Program Files', 'Opera', 'Opera.exe')
+    if OS.win32?
+      @path = File.join('C:', 'Program Files', 'Opera', 'Opera.exe')
+			@supported = true if File.exist?(@path)
+			if OS.cygwin?
+				@path = `cygpath -u #{@path}`.gsub(/\n/,' ').gsub(/ /,'\ ').gsub(/\\\ $/,'')
+			end
     end
-    if PLATFORM.match(/linux/)
+    if OS.linux?
       @path = `which opera`
+			@supported = true if File.exist?(@path)
     end
-    if PLATFORM.match(/darwin/)
-      applescript('tell application "Opera" to make new document')
+    if OS.osx?
+      if applescript('tell application "Opera" to make new document')
+				@supported = true
+			end
     end
   end
   
   def supported?
-    PLATFORM.match(/mswin/) or PLATFORM.match(/linux/) or PLATFORM.match(/darwin/)
+    @supported
   end
 
   def teardown
-    if PLATFORM.match(/darwin/)
+    if OS.osx?
       applescript('tell application "Opera" to close front document')
     else
       # TODO:
@@ -114,7 +153,7 @@ class OperaBrowser
   end
 
   def close_page(url)
-    if PLATFORM.match(/darwin/)
+    if OS.osx?
       # see: http://lists.apple.com/archives/applescript-users/2007/Aug/msg00262.html
       applescript(%Q(tell application "Opera" 
                       activate
@@ -127,7 +166,7 @@ class OperaBrowser
   end
 
   def visit(url)
-    if PLATFORM.match(/darwin/)
+    if OS.osx?
       #applescript('tell application "Opera" to GetURL "' + url + '"')
       applescript(%Q(tell application "Opera"
                        activate
@@ -156,7 +195,7 @@ class SafariBrowser
   end
 
   def supported?
-    PLATFORM.match(/darwin/)
+    OS.osx?
   end
 
   def teardown
@@ -179,7 +218,7 @@ end
 
 ::WEBrick::HTTPServer.class_eval do
   def access_log(config, req, res)
-    #puts "Access: #{req.inspect}, #{res.inspect}"
+    #puts "Access: #{req.unparsed_uri}, #{res.status}"
     # silence logging
   end
 end
@@ -297,7 +336,7 @@ class JSTestRunner
           value = "."
           begin
             Timeout::timeout(10) do 
-              browser.visit("http://localhost:4711/#{test}?resultsURL=http://localhost:4711/results&t=" + ("%.6f" % Time.now.to_f))
+							browser.visit("http://localhost:4711/#{test}?resultsURL=http://localhost:4711/results&t=" + ("%.6f" % Time.now.to_f))
               result = @queue.pop
               result.each { |k, v| results[k] += v }
             end
@@ -322,7 +361,7 @@ class JSTestRunner
             browser.close_page(test)
           end
    
-          print value
+          STDERR.print value
         end
       end
 
