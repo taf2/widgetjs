@@ -31,6 +31,9 @@ class IeBrowser
     @ie.Quit
   end
 
+  def close_page(url)
+  end
+
   def visit(url)
     @ie.Navigate(url)
     while @ie.ReadyState != 4 do
@@ -48,7 +51,6 @@ class FirefoxBrowser
     if PLATFORM.match(/linux/)
       @path = `which firefox`
     end
-    @visited = []
   end
   
   def supported?
@@ -56,31 +58,33 @@ class FirefoxBrowser
   end
 
   def teardown
-    if PLATFORM.match(/darwin/)
-      @visited.each do|visited|
-        #applescript('tell application "Firefox" to Close URL "' + visited + '"')
-        # see: http://lists.apple.com/archives/applescript-users/2007/Aug/msg00262.html
-        # TODO: we need a better way to teardown in firefox
-        applescript %Q(tell application "Firefox"
-                          activate
-                          tell application "System Events"
-                            keystroke "w" using command down
-                          end tell
-                        end tell)
-      end
-    else
-      # TODO:
-    end
   end
 
   def visit(url)
     if PLATFORM.match(/darwin/)
-      applescript('tell application "Firefox" to Get URL "' + url + '"')
-      @visited << url
+      applescript(%Q(tell application "Firefox"
+                        activate
+                        Get URL "#{url}"
+                     end tell
+                    ))
     else
       system("#{@path} #{url}")
     end
   end
+
+  def close_page(url)
+    if PLATFORM.match(/darwin/)
+      # see: http://lists.apple.com/archives/applescript-users/2007/Aug/msg00262.html
+      # TODO: we need a better way to teardown in firefox
+      applescript %Q(tell application "Firefox"
+                        activate
+                        tell application "System Events"
+                          keystroke "w" using command down
+                        end tell
+                      end tell)
+    end
+  end
+
   def to_s; "Firefox"; end
 end
 
@@ -103,15 +107,33 @@ class OperaBrowser
 
   def teardown
     if PLATFORM.match(/darwin/)
-      applescript('tell application "Opera" to quit')
+      applescript('tell application "Opera" to close front document')
     else
       # TODO:
     end
   end
 
+  def close_page(url)
+    if PLATFORM.match(/darwin/)
+      # see: http://lists.apple.com/archives/applescript-users/2007/Aug/msg00262.html
+      applescript(%Q(tell application "Opera" 
+                      activate
+                      tell application "System Events"
+                        keystroke "w" using command down
+                      end tell
+                    end tell
+                    ))
+    end
+  end
+
   def visit(url)
     if PLATFORM.match(/darwin/)
-      applescript('tell application "Opera" to GetURL "' + url + '"')
+      #applescript('tell application "Opera" to GetURL "' + url + '"')
+      applescript(%Q(tell application "Opera"
+                       activate
+                       GetURL "#{url}"
+                     end tell
+                    ))
     else
       system("#{@path} #{url}")
     end
@@ -138,11 +160,18 @@ class SafariBrowser
   end
 
   def teardown
-    applescript('tell application "Safari" to quit')
+    applescript('tell application "Safari" to close front document')
+  end
+
+  def close_page(url)
   end
 
   def visit(url)
-    applescript('tell application "Safari" to set URL of front document to "' + url + '"')
+    applescript(%Q(tell application "Safari"
+                     activate
+                     set URL of front document to "#{url}"
+                   end tell
+                  ))
   end
 
   def to_s ;"Safari" ;end
@@ -245,7 +274,10 @@ class JSTestRunner
   end
 
   def run
-    trap("INT") { @server.shutdown }
+    trap("INT") do
+      @server.shutdown 
+      exit( 1 )
+    end
     t = Thread.new { @server.start }
 
     @browsers.flatten!
@@ -284,6 +316,10 @@ class JSTestRunner
           if result[:errors] > 0
             value = "E"
             errors.push(test)
+          end
+
+          if value == "."
+            browser.close_page(test)
           end
    
           print value
