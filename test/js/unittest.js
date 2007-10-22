@@ -204,7 +204,7 @@ Test.Unit.Runner.prototype = {
   postResults: function() {
     if (this.options.resultsURL) {
       new Ajax.Request(this.options.resultsURL, 
-        { method: 'get', parameters: 'result=' + this.getResult(), asynchronous: false });
+        { method: 'post', parameters: 'result=' + this.getResult(), asynchronous: false });
     }
   },
   runTests: function() {
