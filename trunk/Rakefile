@@ -37,5 +37,5 @@ def setup_tester(tester)
   
   tester.add_tests Dir["test/unit/*.html"]
 
-  tester.add_browsers "safari", "firefox", "ie", "konqueror", "opera"
+  tester.add_browsers "opera", "firefox", "ie", "konqueror", "safari"
 end
