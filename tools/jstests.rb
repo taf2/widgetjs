@@ -75,12 +75,16 @@ class FirefoxBrowser
 			if OS.cygwin?
 				@path = `cygpath -u #{@path}`.gsub(/\n/,' ').gsub(/ /,'\ ').gsub(/\\\ $/,'')
 			end
-    end
-    if OS.linux?
-      @path = `which firefox`
-			@supported = File.exist?(@path)
-    end
-    if OS.osx?
+    elsif OS.linux?
+      html_view = `which htmlview`.strip
+      if File.exist?(html_view)
+        @path = html_view
+        @supported = true
+      else
+        @path = `which firefox`.strip
+        @supported = File.exist?(@path)
+      end
+    elsif OS.osx?
 			@supported = true
 		end
   end
