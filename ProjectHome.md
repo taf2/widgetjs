@@ -1,0 +1,1 @@
+WidgetJS is a library that extends prototype.js making it easy to create reusable JS Widgets
